@@ -7,12 +7,22 @@
       "type": "io.micrometer.context.ContextRegistry"
     },
     {
+      "type": "com.fasterxml.jackson.databind.ext.Java7SupportImpl",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "io.modelcontextprotocol.spec.McpSchema$CallToolRequest",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
             "java.lang.String",
+            "java.util.Map",
             "java.util.Map"
           ]
         }
@@ -28,6 +38,14 @@
         {
           "name": "isError",
           "parameterTypes": []
+        },
+        {
+          "name": "meta",
+          "parameterTypes": []
+        },
+        {
+          "name": "structuredContent",
+          "parameterTypes": []
         }
       ]
     },
@@ -39,10 +57,14 @@
           "parameterTypes": [
             "java.util.Map",
             "io.modelcontextprotocol.spec.McpSchema$ClientCapabilities$RootCapabilities",
-            "io.modelcontextprotocol.spec.McpSchema$ClientCapabilities$Sampling"
+            "io.modelcontextprotocol.spec.McpSchema$ClientCapabilities$Sampling",
+            "io.modelcontextprotocol.spec.McpSchema$ClientCapabilities$Elicitation"
           ]
         }
       ]
+    },
+    {
+      "type": "io.modelcontextprotocol.spec.McpSchema$ClientCapabilities$Elicitation"
     },
     {
       "type": "io.modelcontextprotocol.spec.McpSchema$ClientCapabilities$RootCapabilities",
@@ -78,11 +100,16 @@
           "name": "<init>",
           "parameterTypes": [
             "java.lang.String",
+            "java.lang.String",
             "java.lang.String"
           ]
         },
         {
           "name": "name",
+          "parameterTypes": []
+        },
+        {
+          "name": "title",
           "parameterTypes": []
         },
         {
@@ -99,7 +126,8 @@
           "parameterTypes": [
             "java.lang.String",
             "io.modelcontextprotocol.spec.McpSchema$ClientCapabilities",
-            "io.modelcontextprotocol.spec.McpSchema$Implementation"
+            "io.modelcontextprotocol.spec.McpSchema$Implementation",
+            "java.util.Map"
           ]
         }
       ]
@@ -113,6 +141,10 @@
         },
         {
           "name": "instructions",
+          "parameterTypes": []
+        },
+        {
+          "name": "meta",
           "parameterTypes": []
         },
         {
@@ -218,11 +250,27 @@
         {
           "name": "tools",
           "parameterTypes": []
+        },
+        {
+          "name": "meta",
+          "parameterTypes": []
         }
       ]
     },
     {
+      "type": "io.modelcontextprotocol.spec.McpSchema$Annotated"
+    },
+    {
+      "type": "io.modelcontextprotocol.spec.McpSchema$Annotations"
+    },
+    {
+      "type": "io.modelcontextprotocol.spec.McpSchema$BaseMetadata"
+    },
+    {
       "type": "io.modelcontextprotocol.spec.McpSchema$Request"
+    },
+    {
+      "type": "io.modelcontextprotocol.spec.McpSchema$Result"
     },
     {
       "type": "io.modelcontextprotocol.spec.McpSchema$ServerCapabilities",
@@ -306,11 +354,11 @@
       "type": "io.modelcontextprotocol.spec.McpSchema$TextContent",
       "methods": [
         {
-          "name": "audience",
+          "name": "annotations",
           "parameterTypes": []
         },
         {
-          "name": "priority",
+          "name": "meta",
           "parameterTypes": []
         },
         {
@@ -323,6 +371,10 @@
       "type": "io.modelcontextprotocol.spec.McpSchema$Tool",
       "methods": [
         {
+          "name": "annotations",
+          "parameterTypes": []
+        },
+        {
           "name": "description",
           "parameterTypes": []
         },
@@ -331,7 +383,74 @@
           "parameterTypes": []
         },
         {
+          "name": "meta",
+          "parameterTypes": []
+        },
+        {
           "name": "name",
+          "parameterTypes": []
+        },
+        {
+          "name": "outputSchema",
+          "parameterTypes": []
+        },
+        {
+          "name": "title",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "io.modelcontextprotocol.spec.McpSchema$ToolAnnotations"
+    },
+    {
+      "type": "org.eclipse.jetty.http.Http10FieldPreEncoder"
+    },
+    {
+      "type": "org.eclipse.jetty.http.Http11FieldPreEncoder"
+    },
+    {
+      "type": "org.eclipse.jetty.util.TypeUtil",
+      "methods": [
+        {
+          "name": "getClassLoaderLocation",
+          "parameterTypes": [
+            "java.lang.Class"
+          ]
+        },
+        {
+          "name": "getCodeSourceLocation",
+          "parameterTypes": [
+            "java.lang.Class"
+          ]
+        },
+        {
+          "name": "getModuleLocation",
+          "parameterTypes": [
+            "java.lang.Class"
+          ]
+        },
+        {
+          "name": "getSystemClassLoaderLocation",
+          "parameterTypes": [
+            "java.lang.Class"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.jetty.util.Utf8StringBuilder",
+      "methods": [
+        {
+          "name": "errorActionIgnore",
+          "parameterTypes": []
+        },
+        {
+          "name": "errorActionReplace",
+          "parameterTypes": []
+        },
+        {
+          "name": "errorActionReport",
           "parameterTypes": []
         }
       ]
@@ -364,6 +483,9 @@
     },
     {
       "type": "reactor.core.publisher.FluxSubscribeOnCallable$CallableSubscribeOnSubscription"
+    },
+    {
+      "type": "reactor.core.publisher.LambdaMonoSubscriber"
     },
     {
       "type": "reactor.core.publisher.LambdaSubscriber"
@@ -431,7 +553,43 @@
       "glob": "META-INF/services/javax.xml.parsers.DocumentBuilderFactory"
     },
     {
+      "glob": "META-INF/services/org.eclipse.jetty.http.HttpFieldPreEncoder"
+    },
+    {
       "glob": "META-INF/services/org.slf4j.spi.SLF4JServiceProvider"
+    },
+    {
+      "glob": "jakarta/servlet/LocalStrings.properties"
+    },
+    {
+      "glob": "jakarta/servlet/LocalStrings_en.properties"
+    },
+    {
+      "glob": "jakarta/servlet/LocalStrings_en_GB.properties"
+    },
+    {
+      "glob": "jakarta/servlet/http/LocalStrings.properties"
+    },
+    {
+      "glob": "jakarta/servlet/http/LocalStrings_en.properties"
+    },
+    {
+      "glob": "jakarta/servlet/http/LocalStrings_en_GB.properties"
+    },
+    {
+      "glob": "org/eclipse/jetty/http/encoding.properties"
+    },
+    {
+      "glob": "org/eclipse/jetty/http/mime.properties"
+    },
+    {
+      "glob": "org/eclipse/jetty/version/build.properties"
+    },
+    {
+      "bundle": "jakarta.servlet.LocalStrings"
+    },
+    {
+      "bundle": "jakarta.servlet.http.LocalStrings"
     }
   ]
 }

@@ -2,15 +2,34 @@ package uk.co.bithatch.opensim.console2mcp;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+import org.eclipse.jetty.ee10.servlet.FilterHolder;
+import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
+import org.eclipse.jetty.ee10.servlet.ServletHolder;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.ServerConnector;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
+import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 
@@ -19,6 +38,7 @@ public class OpensimMCP implements AutoCloseable {
     private final OpensimRESTConsole console;
     private final boolean diagnostics;
     private McpSyncServer server;
+    private Server httpServer;
 
     public OpensimMCP(OpensimRESTConsole console) {
         this(console, false);
@@ -30,8 +50,12 @@ public class OpensimMCP implements AutoCloseable {
     }
 
     public void start() {
+        startStdio();
+    }
+
+    public void startStdio() {
         var started = System.nanoTime();
-        diag("start() entered");
+        diag("startStdio() entered");
         var transportProvider = new StdioServerTransportProvider();
         diag("StdioServerTransportProvider created");
         var serverSpec = McpServer.sync(transportProvider)
@@ -55,6 +79,50 @@ public class OpensimMCP implements AutoCloseable {
         diag("MCP server built in " + millisSince(started) + "ms");
     }
 
+    public String startHttp(String bindAddress, int port, String endpoint, Long keepAliveSeconds,
+            boolean disallowDelete, String bearerToken) throws Exception {
+        var started = System.nanoTime();
+        var normalizedEndpoint = normalizeEndpoint(endpoint);
+        diag("startHttp() entered host=" + bindAddress + " port=" + port + " endpoint=" + normalizedEndpoint);
+
+        var transportBuilder = HttpServletStreamableServerTransportProvider.builder()
+                .objectMapper(new ObjectMapper())
+                .mcpEndpoint(normalizedEndpoint)
+                .disallowDelete(disallowDelete);
+        if (keepAliveSeconds != null && keepAliveSeconds > 0) {
+            transportBuilder.keepAliveInterval(Duration.ofSeconds(keepAliveSeconds));
+        }
+
+        var transportProvider = transportBuilder.build();
+        var serverSpec = McpServer.sync(transportProvider)
+                .requestTimeout(Duration.ofSeconds(60))
+                .serverInfo("opensim-console2mcp", "0.0.1")
+                .instructions("OpenSimulator REST console MCP bridge. Tools return command output as an array of lines.");
+
+        diag("Loading full help catalog...");
+        var catalogLoadStarted = System.nanoTime();
+        var catalog = console.loadHelpCatalog();
+        var moduleCount = catalog.modules().size();
+        var commandCount = catalog.modules().stream().mapToInt(module -> module.commands().size()).sum();
+        diag("Catalog loaded in " + millisSince(catalogLoadStarted) + "ms (modules=" + moduleCount + ", commands="
+                + commandCount + ")");
+
+        var toolSpecs = buildToolSpecifications(catalog);
+        diag("Built " + toolSpecs.size() + " MCP tool specifications");
+        serverSpec.tools(toolSpecs);
+        diag("Building MCP streamable server instance...");
+        server = serverSpec.build();
+
+        httpServer = createHttpServer(bindAddress, port, normalizedEndpoint, transportProvider, bearerToken);
+        httpServer.start();
+
+        var connector = (ServerConnector) httpServer.getConnectors()[0];
+        var localHost = connector.getHost() == null ? "0.0.0.0" : connector.getHost();
+        var advertisedUrl = "http://" + localHost + ":" + connector.getLocalPort() + normalizedEndpoint;
+        diag("MCP HTTP server started at " + advertisedUrl + " in " + millisSince(started) + "ms");
+        return advertisedUrl;
+    }
+
     public void runUntilInterrupted() {
         while (!Thread.currentThread().isInterrupted()) {
             try {
@@ -67,9 +135,97 @@ public class OpensimMCP implements AutoCloseable {
 
     @Override
     public void close() {
+        if (httpServer != null) {
+            try {
+                httpServer.stop();
+                diag("HTTP server stopped.");
+            } catch (Exception e) {
+                diag("Error stopping HTTP server: " + e.getMessage());
+            }
+        }
         if (server != null) {
             server.closeGracefully();
             server.close();
+        }
+    }
+
+    static String normalizeEndpoint(String endpoint) {
+        var value = endpoint == null ? "" : endpoint.trim();
+        if (value.isEmpty()) {
+            return "/mcp";
+        }
+        if (!value.startsWith("/")) {
+            value = "/" + value;
+        }
+        while (value.length() > 1 && value.endsWith("/")) {
+            value = value.substring(0, value.length() - 1);
+        }
+        return value;
+    }
+
+    static boolean isAuthorizedBearerHeader(String header, String expectedToken) {
+        if (expectedToken == null || expectedToken.isBlank()) {
+            return true;
+        }
+        if (header == null || header.isBlank()) {
+            return false;
+        }
+        var prefix = "Bearer ";
+        if (!header.regionMatches(true, 0, prefix, 0, prefix.length())) {
+            return false;
+        }
+        var presentedToken = header.substring(prefix.length()).trim();
+        return expectedToken.equals(presentedToken);
+    }
+
+    private static Server createHttpServer(String bindAddress, int port, String endpoint,
+            HttpServletStreamableServerTransportProvider provider, String bearerToken) {
+        var server = new Server();
+        var connector = new ServerConnector(server);
+        connector.setHost(bindAddress);
+        connector.setPort(port);
+        server.addConnector(connector);
+
+        var context = new ServletContextHandler(ServletContextHandler.NO_SESSIONS);
+        context.setContextPath("/");
+        context.addServlet(new ServletHolder(provider), endpoint);
+
+        if (bearerToken != null && !bearerToken.isBlank()) {
+            var holder = new FilterHolder(new BearerTokenAuthFilter(bearerToken));
+            context.addFilter(holder, endpoint, EnumSet.of(DispatcherType.REQUEST, DispatcherType.ASYNC));
+        }
+
+        server.setHandler(context);
+        return server;
+    }
+
+    private static final class BearerTokenAuthFilter implements Filter {
+
+        private final String expectedToken;
+
+        private BearerTokenAuthFilter(String expectedToken) {
+            this.expectedToken = expectedToken;
+        }
+
+        @Override
+        public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+                throws java.io.IOException, ServletException {
+            if (!(request instanceof HttpServletRequest httpRequest) || !(response instanceof HttpServletResponse httpResponse)) {
+                chain.doFilter(request, response);
+                return;
+            }
+
+            var header = httpRequest.getHeader("Authorization");
+            if (!isAuthorizedBearerHeader(header, expectedToken)) {
+                httpResponse.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                httpResponse.setHeader("WWW-Authenticate", "Bearer");
+                httpResponse.setContentType("application/json");
+                httpResponse.setCharacterEncoding("UTF-8");
+                httpResponse.getWriter().write("{\"error\":\"Unauthorized\"}");
+                return;
+            }
+
+            chain.doFilter(request, response);
         }
     }
 
@@ -79,9 +235,11 @@ public class OpensimMCP implements AutoCloseable {
         for (var module : catalog.modules()) {
             for (var command : module.commands()) {
                 var toolName = uniqueToolName(module.name(), command.name(), usedNames);
-                var tool = new McpSchema.Tool(toolName,
-                        module.name() + ": " + command.description(),
-                        buildInputSchema(command));
+                var tool = McpSchema.Tool.builder()
+                        .name(toolName)
+                        .description(module.name() + ": " + command.description())
+                        .inputSchema(buildInputSchema(command))
+                        .build();
                 specs.add(new McpServerFeatures.SyncToolSpecification(tool,
                         (exchange, args) -> callTool(command, args)));
             }

@@ -18,6 +18,7 @@ public class OpensimConsole2MCP implements Callable<Integer> {
 
 	public enum Mode {
 		STDIO,
+		HTTP,
 		CONSOLE
 	}
 	
@@ -46,6 +47,24 @@ public class OpensimConsole2MCP implements Callable<Integer> {
 
 	@Option(names = "--mcp-diagnostics", description = "Enable MCP startup/handshake diagnostics to stderr")
 	private boolean mcpDiagnostics;
+
+	@Option(names = "--http-host", description = "HTTP bind address for MCP streamable mode (default: ${DEFAULT-VALUE})")
+	private String httpHost = "127.0.0.1";
+
+	@Option(names = "--http-port", description = "HTTP bind port for MCP streamable mode (default: ${DEFAULT-VALUE})")
+	private int httpPort = 8123;
+
+	@Option(names = "--http-endpoint", description = "HTTP endpoint path for MCP streamable mode (default: ${DEFAULT-VALUE})")
+	private String httpEndpoint = "/mcp";
+
+	@Option(names = "--http-keepalive-seconds", description = "Optional server keepalive interval in seconds for streamable mode")
+	private Long httpKeepAliveSeconds;
+
+	@Option(names = "--http-disallow-delete", negatable = true, description = "Allow DELETE session requests on streamable endpoint (default: ${DEFAULT-VALUE})")
+	private boolean httpDisallowDelete;
+
+	@Option(names = "--http-bearer-token", description = "Require Authorization: Bearer <token> in HTTP MCP mode")
+	private String httpBearerToken;
 
 	@Parameters(index = "0", arity="0..1", description = "REST console URL")
 	private Optional<String> url;
@@ -79,9 +98,25 @@ public class OpensimConsole2MCP implements Callable<Integer> {
 					System.err.println("[OpensimMCP][DIAG] Entering STDIO mode.");
 				}
 				try (var mcp = new OpensimMCP(opensim, mcpDiagnostics)) {
-					mcp.start();
+					mcp.startStdio();
 					if (mcpDiagnostics) {
 						System.err.println("[OpensimMCP][DIAG] MCP start() completed; waiting for client messages.");
+					}
+					mcp.runUntilInterrupted();
+				}
+				return 0;
+			}
+
+			if (mode == Mode.HTTP) {
+				if (mcpDiagnostics) {
+					System.err.println("[OpensimMCP][DIAG] Entering HTTP streamable mode.");
+				}
+				try (var mcp = new OpensimMCP(opensim, mcpDiagnostics)) {
+					var endpoint = mcp.startHttp(httpHost, httpPort, httpEndpoint, httpKeepAliveSeconds,
+							httpDisallowDelete, httpBearerToken);
+					System.err.println("MCP streamable endpoint ready at " + endpoint);
+					if (httpBearerToken != null && !httpBearerToken.isBlank()) {
+						System.err.println("HTTP auth enabled (Bearer token required).");
 					}
 					mcp.runUntilInterrupted();
 				}
