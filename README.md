@@ -1,6 +1,6 @@
 # opensim-console2mcp
 
-Bridge for talking to the OpenSimulator REST console and streaming command output back to stdin/stdout.
+Bridges the OpenSimulator REST console and the MCP protocol. Intend  for use as part of the [https://github.com/bithatch/opensim-osgrid-docker](Opensim and OSGrid Docker Stack)
 
 ## Build
 
@@ -12,6 +12,79 @@ Build native executable (`target/opensim-console2mcp`):
 
 ```bash
 mvn -Pnative-image -DskipTests package
+```
+
+## Docker (multiarch Java runtime image)
+
+- `Dockerfile` (multi-stage Maven build, JVM runtime image)
+- `docker/entrypoint.sh` (maps env vars to CLI arguments)
+
+The container runs the regular JAR, not the native binary.
+
+### Environment variables (compatible with opensim-osgrid-docker)
+
+These are the same core variables used by the MCP sidecar in
+`opensim-osgrid-docker/README.md`:
+
+- `MCP_TRANSPORT` (`http`, `sse`, or `stdio`)
+- `MCP_HOST`
+- `MCP_PORT`
+- `OPENSIM_CONSOLE_URL`
+- `OPENSIM_CONSOLE_USER`
+- `OPENSIM_CONSOLE_PASS`
+
+Notes:
+
+- `MCP_TRANSPORT=sse` is accepted for compatibility and currently runs HTTP streamable mode.
+- For this image, `MCP_TRANSPORT=stdio` is mainly useful for local process testing (not typical container network usage).
+
+Optional variables:
+
+- `MCP_HTTP_ENDPOINT` (default `/mcp`)
+- `MCP_HTTP_BEARER_TOKEN`
+- `MCP_HTTP_KEEPALIVE_SECONDS`
+- `MCP_HTTP_DISALLOW_DELETE` (`true`/`false`)
+- `MCP_DIAGNOSTICS` (`true`/`false`)
+- `OPENSIM_MCP_DEBUG` (`true`/`false`)
+
+### Build local image
+
+```bash
+docker build -t opensim-console2mcp:local .
+```
+
+### Run local image
+
+```bash
+docker run --rm \
+  -e MCP_TRANSPORT=http \
+  -e MCP_HOST=0.0.0.0 \
+  -e MCP_PORT=9001 \
+  -e OPENSIM_CONSOLE_URL=http://host.docker.internal:9000 \
+  -e OPENSIM_CONSOLE_USER=ConsoleUser \
+  -e OPENSIM_CONSOLE_PASS=ConsolePass \
+  -p 9001:9001 \
+  opensim-console2mcp:local
+```
+
+### Build and publish multiarch image
+
+Create/use a buildx builder once:
+
+```bash
+docker buildx create --name multiarch --use
+docker buildx inspect --bootstrap
+```
+
+Build and push Linux AMD64 + ARM64:
+
+```bash
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t bithatch/opensim-console2mcp:latest \
+  -t bithatch/opensim-console2mcp:$(date +%Y%m%d) \
+  --push \
+  .
 ```
 
 ## Run
