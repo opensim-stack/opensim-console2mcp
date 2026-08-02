@@ -27,7 +27,9 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
+import org.xml.sax.SAXParseException;
 
 public class OpensimRESTConsole implements AutoCloseable {
 
@@ -46,6 +48,7 @@ public class OpensimRESTConsole implements AutoCloseable {
 	private final AtomicInteger lastSeenLineNumber = new AtomicInteger(-1);
 	private final AtomicBoolean running = new AtomicBoolean(true);
 	private final Object commandLock = new Object();
+	private static final long RECOVERY_RETRY_DELAY_MS = 1500L;
 
 	private volatile String sessionId;
 	private volatile String prompt = "";
@@ -201,9 +204,10 @@ public class OpensimRESTConsole implements AutoCloseable {
 				if (!running.get()) {
 					break;
 				}
-				debug("RECV", "Polling failed: " + e.getMessage() + ". Retrying.");
+				debug("RECV", "Polling failed: " + e.getMessage() + ". Attempting session recovery.");
+				attemptSessionRecovery(e);
 				try {
-					Thread.sleep(500);
+					Thread.sleep(RECOVERY_RETRY_DELAY_MS);
 				} catch (InterruptedException ie) {
 					Thread.currentThread().interrupt();
 					break;
@@ -211,6 +215,28 @@ public class OpensimRESTConsole implements AutoCloseable {
 			}
 		}
 		debug("RECV", "Receiver thread stopped.");
+	}
+
+	private void attemptSessionRecovery(RuntimeException failure) {
+		if (!running.get()) {
+			return;
+		}
+
+		synchronized (commandLock) {
+			if (!running.get()) {
+				return;
+			}
+			try {
+				debug("SESSION", "Re-establishing REST session after failure: " + failure.getMessage());
+				receivedLines.clear();
+				lastSeenLineNumber.set(-1);
+				startSession();
+				primeLineCursor();
+				debug("SESSION", "REST session recovery complete.");
+			} catch (RuntimeException recoveryError) {
+				debug("SESSION", "Session recovery failed: " + recoveryError.getMessage());
+			}
+		}
 	}
 
 	private List<String> collectCommandOutput(String commandText) {
@@ -716,10 +742,31 @@ public class OpensimRESTConsole implements AutoCloseable {
 
 	private static Document parseXml(String xml) {
 		try {
+			if (xml == null || xml.isBlank()) {
+				throw new IllegalStateException("Failed to parse XML: empty response body.");
+			}
 			var factory = DocumentBuilderFactory.newInstance();
 			factory.setNamespaceAware(false);
 			var builder = factory.newDocumentBuilder();
+			builder.setErrorHandler(new ErrorHandler() {
+				@Override
+				public void warning(SAXParseException exception) {
+					// Swallow parser warnings to keep logs readable; caller handles parse failures.
+				}
+
+				@Override
+				public void error(SAXParseException exception) {
+					// Swallow parser errors to avoid repeated stderr spam from the XML parser.
+				}
+
+				@Override
+				public void fatalError(SAXParseException exception) {
+					// Swallow fatal parser messages; parse() still throws and is handled below.
+				}
+			});
 			return builder.parse(new InputSource(new StringReader(xml)));
+		} catch (IllegalStateException e) {
+			throw e;
 		} catch (Exception e) {
 			throw new IllegalStateException("Failed to parse XML: " + sanitize(xml), e);
 		}
