@@ -266,8 +266,13 @@ public class OpensimMCP implements AutoCloseable {
 
     private String renderCommandLine(OpensimRESTConsole.HelpCommand command, Map<String, Object> args) {
         var out = new StringBuilder(command.name());
-        for (var argument : command.arguments()) {
-            var value = args.get(argument.name());
+        for (var binding : buildArgumentBindings(command)) {
+            var argument = binding.argument();
+            var value = args.get(binding.schemaName());
+            if (value == null) {
+                // Backward compatibility for clients that already cached the previous schema.
+                value = args.get(argument.name());
+            }
             if (value == null) {
                 continue;
             }
@@ -292,7 +297,8 @@ public class OpensimMCP implements AutoCloseable {
         var properties = new LinkedHashMap<String, Object>();
         var required = new ArrayList<String>();
 
-        for (var argument : command.arguments()) {
+        for (var binding : buildArgumentBindings(command)) {
+            var argument = binding.argument();
             var prop = new LinkedHashMap<String, Object>();
             var isFlag = "option".equals(argument.kind()) && argument.option() == null;
             prop.put("type", isFlag ? "boolean" : "string");
@@ -303,14 +309,60 @@ public class OpensimMCP implements AutoCloseable {
             if (argument.option() != null) {
                 prop.put("option", argument.option());
             }
-            properties.put(argument.name(), prop);
+            properties.put(binding.schemaName(), prop);
 
             if (!argument.optional()) {
-                required.add(argument.name());
+                required.add(binding.schemaName());
             }
         }
 
         return new McpSchema.JsonSchema("object", properties, required, false, Map.of(), Map.of());
+    }
+
+    private static List<ToolArgumentBinding> buildArgumentBindings(OpensimRESTConsole.HelpCommand command) {
+        var result = new ArrayList<ToolArgumentBinding>();
+        var used = new LinkedHashSet<String>();
+        var index = 0;
+        for (var argument : command.arguments()) {
+            var base = sanitizeSchemaPropertyName(argument.name(), index);
+            var candidate = base;
+            var counter = 2;
+            while (used.contains(candidate)) {
+                candidate = base + "_" + counter;
+                if (candidate.length() > 64) {
+                    candidate = candidate.substring(0, 64);
+                }
+                counter++;
+            }
+            used.add(candidate);
+            result.add(new ToolArgumentBinding(argument, candidate));
+            index++;
+        }
+        return result;
+    }
+
+    private static String sanitizeSchemaPropertyName(String raw, int fallbackIndex) {
+        var value = raw == null ? "" : raw.trim();
+        var out = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            var c = value.charAt(i);
+            var valid = (c >= 'a' && c <= 'z')
+                    || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9')
+                    || c == '_'
+                    || c == '.'
+                    || c == '-';
+            out.append(valid ? c : '_');
+        }
+
+        var cleaned = out.toString().replaceAll("_+", "_").replaceAll("^[_\\.-]+|[_\\.-]+$", "");
+        if (cleaned.isBlank()) {
+            cleaned = "arg_" + fallbackIndex;
+        }
+        if (cleaned.length() > 64) {
+            cleaned = cleaned.substring(0, 64);
+        }
+        return cleaned;
     }
 
     private static String uniqueToolName(String moduleName, String commandName, Set<String> used) {
@@ -438,5 +490,8 @@ public class OpensimMCP implements AutoCloseable {
 
     private static long millisSince(long startedAtNanos) {
         return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAtNanos);
+    }
+
+    private record ToolArgumentBinding(OpensimRESTConsole.HelpArgument argument, String schemaName) {
     }
 }
