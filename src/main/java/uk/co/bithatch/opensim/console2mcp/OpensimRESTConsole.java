@@ -26,7 +26,6 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXParseException;
@@ -100,7 +99,14 @@ public class OpensimRESTConsole implements AutoCloseable {
 			var result = parseElementText(body, "Result").orElse("");
 			debug("COMMAND", "SessionCommand result payload: " + sanitize(result));
 
-			var output = collectCommandOutput(commandText);
+			final List<String> output;
+			try {
+				output = collectCommandOutput(commandText);
+			} catch (InteractivePromptException e) {
+				debug("COMMAND", "Interactive input prompt detected; recovering session before returning error.");
+				attemptSessionRecovery(e);
+				throw e;
+			}
 			if (!result.isBlank() && (!"OK".equalsIgnoreCase(result.trim()) || output.isEmpty())) {
 				output.add("[Result] " + result);
 			}
@@ -283,6 +289,10 @@ public class OpensimRESTConsole implements AutoCloseable {
 
 				sawAny = true;
 				lastMessageAt = System.nanoTime();
+				if (looksLikeInteractiveInputPrompt(lineText, normalizedPrompt)) {
+					throw new InteractivePromptException(commandText, line.message);
+				}
+
 				if (isPromptCompletionLine(line.prompt, line.command, lineText, normalizedPrompt)) {
 					debug("COMMAND", "Prompt line reached; command output complete.");
 					break;
@@ -297,6 +307,52 @@ public class OpensimRESTConsole implements AutoCloseable {
 			}
 		}
 		return lines;
+	}
+
+	private static boolean looksLikeInteractiveInputPrompt(String lineText, String expectedPrompt) {
+		if (lineText == null) {
+			return false;
+		}
+
+		var trimmed = lineText.trim();
+		if (trimmed.isEmpty()) {
+			return false;
+		}
+
+		if (!expectedPrompt.isEmpty() && expectedPrompt.equals(trimmed)) {
+			return false;
+		}
+
+		var lower = trimmed.toLowerCase();
+		if (trimmed.endsWith(":")) {
+			if (trimmed.contains("[]:")) {
+				return true;
+			}
+
+			if (trimmed.length() <= 160 && (lower.contains(" name")
+					|| lower.startsWith("new region")
+					|| lower.startsWith("name")
+					|| lower.contains(" password")
+					|| lower.startsWith("password")
+					|| lower.contains(" email")
+					|| lower.startsWith("email")
+					|| lower.contains(" uuid")
+					|| lower.startsWith("uuid")
+					|| lower.contains(" model")
+					|| lower.startsWith("model")
+					|| lower.contains(" location")
+					|| lower.startsWith("location")
+					|| lower.contains(" enter ")
+					|| lower.startsWith("enter "))) {
+				return true;
+			}
+		}
+
+		if (trimmed.endsWith("?") && (lower.contains("yes/no") || lower.contains("y/n"))) {
+			return true;
+		}
+
+		return false;
 	}
 
 	private String postForm(String path, Map<String, String> params) {
@@ -436,9 +492,19 @@ public class OpensimRESTConsole implements AutoCloseable {
 		var token = new StringBuilder();
 		var squareDepth = 0;
 		var angleDepth = 0;
+		var inQuotes = false;
+		var escaped = false;
 		for (int i = 0; i < signature.length(); i++) {
 			var c = signature.charAt(i);
-			if (Character.isWhitespace(c) && squareDepth == 0 && angleDepth == 0) {
+			if (c == '"' && !escaped) {
+				inQuotes = !inQuotes;
+			}
+			if (c == '\\' && !escaped) {
+				escaped = true;
+			} else {
+				escaped = false;
+			}
+			if (Character.isWhitespace(c) && squareDepth == 0 && angleDepth == 0 && !inQuotes) {
 				if (token.length() > 0) {
 					tokens.add(token.toString());
 					token.setLength(0);
@@ -483,10 +549,52 @@ public class OpensimRESTConsole implements AutoCloseable {
 	private static List<RawArgumentToken> collectRawArguments(String text, boolean inheritedOptional) {
 		var rawArgs = new ArrayList<RawArgumentToken>();
 		int i = 0;
+		var inQuotes = false;
+		var escaped = false;
 		while (i < text.length()) {
 			char c = text.charAt(i);
-			if (Character.isWhitespace(c) || c == ',') {
+			if (c == '"' && !escaped) {
+				inQuotes = !inQuotes;
+			}
+			if (c == '\\' && !escaped) {
+				escaped = true;
+			} else {
+				escaped = false;
+			}
+
+			if (!inQuotes && (Character.isWhitespace(c) || c == ',')) {
 				i++;
+				continue;
+			}
+
+			// Defensive: skip unmatched closing delimiters to avoid zero-progress loops.
+			if (!inQuotes && (c == ']' || c == '>')) {
+				i++;
+				continue;
+			}
+
+			if (c == '"') {
+				var startQuote = i;
+				i++;
+				var localEscaped = false;
+				while (i < text.length()) {
+					var qc = text.charAt(i);
+					if (qc == '"' && !localEscaped) {
+						i++;
+						break;
+					}
+					if (qc == '\\' && !localEscaped) {
+						localEscaped = true;
+					} else {
+						localEscaped = false;
+					}
+					i++;
+				}
+				var quotedToken = text.substring(startQuote, Math.min(i, text.length())).trim();
+				if (!quotedToken.isEmpty()) {
+					rawArgs.add(new RawArgumentToken(quotedToken, inheritedOptional));
+				}
+				inQuotes = false;
 				continue;
 			}
 			if (c == '[') {
@@ -501,9 +609,10 @@ public class OpensimRESTConsole implements AutoCloseable {
 				var groupToken = text.substring(i, end + 1);
 				var inner = groupToken.substring(1, groupToken.length() - 1);
 				if (containsTopLevelSeparators(inner)) {
-					rawArgs.addAll(collectRawArguments(inner, true || inheritedOptional));
+					// Anything inside [...] is optional by definition.
+					rawArgs.addAll(collectRawArguments(inner, true));
 				} else {
-					rawArgs.add(new RawArgumentToken(groupToken, true || inheritedOptional));
+					rawArgs.add(new RawArgumentToken(groupToken, true));
 				}
 				i = end + 1;
 				continue;
@@ -525,7 +634,41 @@ public class OpensimRESTConsole implements AutoCloseable {
 				}
 				i++;
 			}
+			if (i == start) {
+				// Ensure forward progress even on unexpected syntax.
+				i++;
+				continue;
+			}
 			var token = text.substring(start, i).trim();
+
+			// Combine forms like --default-user "User Name" into a single option token.
+			if (!token.isEmpty() && token.startsWith("-")) {
+				var lookahead = i;
+				while (lookahead < text.length() && Character.isWhitespace(text.charAt(lookahead))) {
+					lookahead++;
+				}
+				if (lookahead < text.length() && text.charAt(lookahead) == '"') {
+					var quoteStart = lookahead;
+					lookahead++;
+					var localEscaped = false;
+					while (lookahead < text.length()) {
+						var qc = text.charAt(lookahead);
+						if (qc == '"' && !localEscaped) {
+							lookahead++;
+							break;
+						}
+						if (qc == '\\' && !localEscaped) {
+							localEscaped = true;
+						} else {
+							localEscaped = false;
+						}
+						lookahead++;
+					}
+					token = token + " " + text.substring(quoteStart, Math.min(lookahead, text.length())).trim();
+					i = lookahead;
+				}
+			}
+
 			if (!token.isEmpty()) {
 				rawArgs.add(new RawArgumentToken(token, inheritedOptional));
 			}
@@ -535,6 +678,11 @@ public class OpensimRESTConsole implements AutoCloseable {
 
 	private static List<HelpArgument> normalizeRawArgument(RawArgumentToken raw, int argIndex) {
 		var token = raw.token.trim();
+		if ("|".equals(token)) {
+			return List.of();
+		}
+
+		token = stripWrappingQuotes(token);
 		if (token.isEmpty()) {
 			return List.of();
 		}
@@ -562,7 +710,7 @@ public class OpensimRESTConsole implements AutoCloseable {
 					new HelpArgument(token, normalizeArgumentName(inner), raw.optional, "positional", List.of(), List.of(), null));
 		}
 
-		var unwrapped = unwrapToken(token);
+		var unwrapped = stripWrappingQuotes(unwrapToken(token));
 		var optionLike = unwrapped.contains("--") || unwrapped.startsWith("-");
 		if (optionLike) {
 			var options = splitTopLevel(unwrapped, '|');
@@ -597,8 +745,18 @@ public class OpensimRESTConsole implements AutoCloseable {
 		var current = new StringBuilder();
 		var angleDepth = 0;
 		var squareDepth = 0;
+		var inQuotes = false;
+		var escaped = false;
 		for (int i = 0; i < text.length(); i++) {
 			var c = text.charAt(i);
+			if (c == '"' && !escaped) {
+				inQuotes = !inQuotes;
+			}
+			if (c == '\\' && !escaped) {
+				escaped = true;
+			} else {
+				escaped = false;
+			}
 			if (c == '<') {
 				angleDepth++;
 			} else if (c == '>' && angleDepth > 0) {
@@ -608,7 +766,7 @@ public class OpensimRESTConsole implements AutoCloseable {
 			} else if (c == ']' && squareDepth > 0) {
 				squareDepth--;
 			}
-			if (c == delimiter && angleDepth == 0 && squareDepth == 0) {
+			if (c == delimiter && angleDepth == 0 && squareDepth == 0 && !inQuotes) {
 				parts.add(current.toString());
 				current.setLength(0);
 				continue;
@@ -640,7 +798,7 @@ public class OpensimRESTConsole implements AutoCloseable {
 	private static List<String> cleanEnumValues(List<String> values) {
 		var cleanedValues = new ArrayList<String>();
 		for (var value : values) {
-			var v = value.trim();
+			var v = stripAngleDelimiters(stripWrappingQuotes(value.trim()));
 			if (!v.isEmpty()) {
 				cleanedValues.add(v);
 			}
@@ -661,8 +819,18 @@ public class OpensimRESTConsole implements AutoCloseable {
 	private static boolean containsTopLevelSeparators(String text) {
 		var angleDepth = 0;
 		var squareDepth = 0;
+		var inQuotes = false;
+		var escaped = false;
 		for (int i = 0; i < text.length(); i++) {
 			var c = text.charAt(i);
+			if (c == '"' && !escaped) {
+				inQuotes = !inQuotes;
+			}
+			if (c == '\\' && !escaped) {
+				escaped = true;
+			} else {
+				escaped = false;
+			}
 			if (c == '<') {
 				angleDepth++;
 			} else if (c == '>' && angleDepth > 0) {
@@ -672,7 +840,7 @@ public class OpensimRESTConsole implements AutoCloseable {
 			} else if (c == ']' && squareDepth > 0) {
 				squareDepth--;
 			}
-			if ((Character.isWhitespace(c) || c == ',') && angleDepth == 0 && squareDepth == 0) {
+			if ((Character.isWhitespace(c) || c == ',') && angleDepth == 0 && squareDepth == 0 && !inQuotes) {
 				return true;
 			}
 		}
@@ -704,7 +872,7 @@ public class OpensimRESTConsole implements AutoCloseable {
 	}
 
 	private static String normalizeArgumentName(String token) {
-		var value = token == null ? "" : token.trim();
+		var value = stripAngleDelimiters(stripWrappingQuotes(token == null ? "" : token.trim()));
 		if (value.startsWith("--")) {
 			return value;
 		}
@@ -715,9 +883,13 @@ public class OpensimRESTConsole implements AutoCloseable {
 	}
 
 	private static String normalizeOptionName(String option) {
-		var value = option == null ? "" : option.trim();
+		var value = stripWrappingQuotes(option == null ? "" : option.trim());
 		while (value.startsWith("-")) {
 			value = value.substring(1);
+		}
+		var whitespaceIdx = value.indexOf(' ');
+		if (whitespaceIdx > 0) {
+			value = value.substring(0, whitespaceIdx);
 		}
 		var equalsIdx = value.indexOf('=');
 		if (equalsIdx > 0) {
@@ -727,17 +899,54 @@ public class OpensimRESTConsole implements AutoCloseable {
 	}
 
 	private static String extractOptionPlaceholder(String option) {
-		var value = option == null ? "" : option.trim();
+		var value = stripWrappingQuotes(option == null ? "" : option.trim());
 		var equalsIdx = value.indexOf('=');
-		if (equalsIdx < 0 || equalsIdx == value.length() - 1) {
+		String placeholder = null;
+		if (equalsIdx >= 0 && equalsIdx < value.length() - 1) {
+			placeholder = value.substring(equalsIdx + 1).trim();
+		} else {
+			var whitespaceIdx = value.indexOf(' ');
+			if (whitespaceIdx > 0 && whitespaceIdx < value.length() - 1) {
+				placeholder = value.substring(whitespaceIdx + 1).trim();
+			}
+		}
+
+		if (placeholder == null || placeholder.isEmpty()) {
 			return null;
 		}
-		var placeholder = value.substring(equalsIdx + 1).trim();
+
+		placeholder = stripWrappingQuotes(placeholder);
 		if ((placeholder.startsWith("<") && placeholder.endsWith(">"))
 				|| (placeholder.startsWith("[") && placeholder.endsWith("]"))) {
 			placeholder = placeholder.substring(1, placeholder.length() - 1).trim();
 		}
 		return placeholder.isEmpty() ? null : placeholder;
+	}
+
+	private static String stripWrappingQuotes(String value) {
+		if (value == null) {
+			return "";
+		}
+
+		var trimmed = value.trim();
+		if (trimmed.length() >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+			return trimmed.substring(1, trimmed.length() - 1).trim();
+		}
+
+		return trimmed;
+	}
+
+	private static String stripAngleDelimiters(String value) {
+		if (value == null) {
+			return "";
+		}
+
+		var trimmed = value.trim();
+		if (trimmed.length() >= 2 && trimmed.startsWith("<") && trimmed.endsWith(">")) {
+			return trimmed.substring(1, trimmed.length() - 1).trim();
+		}
+
+		return trimmed;
 	}
 
 	private static Document parseXml(String xml) {
@@ -875,8 +1084,15 @@ public class OpensimRESTConsole implements AutoCloseable {
 					+ input + "' message='" + message + "'";
 		}
 
-		private boolean isPromptMarker() {
-			return isPromptCompletionLine(prompt, command, message, "");
+	}
+
+	private static final class InteractivePromptException extends IllegalStateException {
+		private static final long serialVersionUID = 1L;
+
+		private InteractivePromptException(String commandText, String promptText) {
+			super("Command '" + commandText + "' appears to be waiting for interactive input ('"
+					+ (promptText == null ? "" : promptText.trim())
+					+ "'). This usually means one or more required parameters were omitted.");
 		}
 	}
 

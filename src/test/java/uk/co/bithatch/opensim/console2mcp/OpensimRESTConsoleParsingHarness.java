@@ -9,7 +9,9 @@ public final class OpensimRESTConsoleParsingHarness {
         testUnnamedEnumArgs();
         testSlashEnumArgs();
         testOptionAliases();
+        testQuotedOptionPlaceholders();
         testNestedOptionals();
+        testAlternationPipeIsNotArgument();
         testPromptCompletionHeuristics();
         System.out.println("All parsing checks passed.");
     }
@@ -91,6 +93,23 @@ public final class OpensimRESTConsoleParsingHarness {
         require("z".equals(cmd.arguments().get(4).name()), "z arg missing");
         require(cmd.arguments().stream().allMatch(OpensimRESTConsole.HelpArgument::optional),
                 "all nested args should be optional");
+    }
+
+    private static void testQuotedOptionPlaceholders() {
+        var line = "load oar [--default-user \"User Name\"] [--bounding-origin \"<x,y,z>\"] - Load a region's data from an OAR archive.";
+        var cmd = OpensimRESTConsole.parseHelpCommandLineForTest(line);
+        require(cmd.arguments().size() == 2, "expected only two option arguments");
+        require("default-user".equals(cmd.arguments().get(0).name()), "default-user option missing");
+        require("User Name".equals(cmd.arguments().get(0).option()), "default-user placeholder mismatch");
+        require("bounding-origin".equals(cmd.arguments().get(1).name()), "bounding-origin option missing");
+        require("x,y,z".equals(cmd.arguments().get(1).option()), "bounding-origin placeholder mismatch");
+    }
+
+    private static void testAlternationPipeIsNotArgument() {
+        var line = "estate set owner <estate-id>[ <UUID> | <Firstname> <Lastname> ] - Sets the owner.";
+        var cmd = OpensimRESTConsole.parseHelpCommandLineForTest(line);
+        require(cmd.arguments().size() == 4, "expected 4 arguments without standalone pipe token");
+        require(cmd.arguments().stream().noneMatch(a -> "|".equals(a.name())), "pipe should not become an argument");
     }
 
     private static void testPromptCompletionHeuristics() {

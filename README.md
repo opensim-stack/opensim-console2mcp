@@ -147,6 +147,7 @@ Then type OpenSim console commands, one per line. End input with `Ctrl-D`.
 - `--mode` switches between `CONSOLE`, MCP `STDIO`, and MCP streamable `HTTP` behavior.
 - HTTP mode serves MCP on `--http-endpoint` (default `/mcp`) with GET/POST/DELETE handled by MCP SDK streamable transport.
 - If `--http-bearer-token` is set, requests must include `Authorization: Bearer <token>`.
+- If OpenSim prompts for interactive input (for example because required command parameters were omitted), the bridge now fails the tool call with an explicit missing-parameters style error and resets the REST session to avoid leaking that prompt into the next command.
 
 ## Local parser checks
 

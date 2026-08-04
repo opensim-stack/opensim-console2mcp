@@ -302,7 +302,7 @@ public class OpensimMCP implements AutoCloseable {
             var prop = new LinkedHashMap<String, Object>();
             var isFlag = "option".equals(argument.kind()) && argument.option() == null;
             prop.put("type", isFlag ? "boolean" : "string");
-            prop.put("description", argument.token());
+            prop.put("description", argument.name());
             if (!argument.values().isEmpty()) {
                 prop.put("enum", argument.values());
             }
