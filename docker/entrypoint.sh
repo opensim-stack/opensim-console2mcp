@@ -39,7 +39,7 @@ fi
 if [ "$mode" = "HTTP" ]; then
   set -- "$@" \
     --http-host "${MCP_HOST:-0.0.0.0}" \
-    --http-port "${MCP_PORT:-9001}" \
+    --http-port "${MCP_PORT:-8997}" \
     --http-endpoint "${MCP_HTTP_ENDPOINT:-/mcp}"
 
   if [ -n "${MCP_HTTP_KEEPALIVE_SECONDS:-}" ]; then

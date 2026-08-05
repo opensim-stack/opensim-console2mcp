@@ -17,11 +17,11 @@ RUN chmod +x /usr/local/bin/opensim-console2mcp-entrypoint.sh
 
 ENV MCP_TRANSPORT=http \
     MCP_HOST=0.0.0.0 \
-    MCP_PORT=9001 \
+    MCP_PORT=8997 \
     MCP_HTTP_ENDPOINT=/mcp \
     OPENSIM_CONSOLE_URL=http://opensim:9000 \
     OPENSIM_CONSOLE_USER=ConsoleUser \
     OPENSIM_CONSOLE_PASS=ConsolePass
 
-EXPOSE 9001/tcp
+EXPOSE 8997/tcp
 ENTRYPOINT ["/usr/local/bin/opensim-console2mcp-entrypoint.sh"]

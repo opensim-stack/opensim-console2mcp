@@ -19,18 +19,18 @@ Run the container and point it at your OpenSim REST console:
 docker run --rm \
   -e MCP_TRANSPORT=http \
   -e MCP_HOST=0.0.0.0 \
-  -e MCP_PORT=9001 \
+  -e MCP_PORT=8997 \
   -e MCP_HTTP_ENDPOINT=/mcp \
   -e OPENSIM_CONSOLE_URL=http://host.docker.internal:9000 \
   -e OPENSIM_CONSOLE_USER=ConsoleUser \
   -e OPENSIM_CONSOLE_PASS=ConsolePass \
-  -p 9001:9001 \
+  -p 8997:8997 \
   bithatch/opensim-console2mcp:latest
 ```
 
 Then connect your MCP client to:
 
-- `http://localhost:9001/mcp`
+- `http://localhost:8997/mcp`
 
 ## Project Links
 

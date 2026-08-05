@@ -61,11 +61,11 @@ docker build -t opensim-console2mcp:local .
 docker run --rm \
   -e MCP_TRANSPORT=http \
   -e MCP_HOST=0.0.0.0 \
-  -e MCP_PORT=9001 \
+  -e MCP_PORT=8997 \
   -e OPENSIM_CONSOLE_URL=http://host.docker.internal:9000 \
   -e OPENSIM_CONSOLE_USER=ConsoleUser \
   -e OPENSIM_CONSOLE_PASS=ConsolePass \
-  -p 9001:9001 \
+  -p 8997:8997 \
   opensim-console2mcp:local
 ```
 
