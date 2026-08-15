@@ -4,6 +4,8 @@
 
 Bridges the OpenSimulator REST console and the MCP protocol. Intend  for use as part of the [https://github.com/bithatch/opensim-osgrid-docker](Opensim and OSGrid Docker Stack)
 
+*This is part of the [opensim-stack](https://opensim-stack.github.io/) and is intended to be used in conjunction with other parts of the stack. See [Docs](https://opensim-stack.github.io/docs/index.html) for full details.*
+
 ## Build
 
 ```bash
