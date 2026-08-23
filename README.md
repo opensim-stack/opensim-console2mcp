@@ -30,25 +30,22 @@ The container runs the regular JAR, not the native binary.
 These are the same core variables used by the MCP sidecar in
 `opensim-osgrid-docker/README.md`:
 
-- `MCP_TRANSPORT` (`http`, `sse`, or `stdio`)
-- `MCP_HOST`
-- `MCP_PORT`
+- `CONSOLE_MCP_TRANSPORT` (`http`, `sse`, or `stdio`)
+- `CONSOLE_MCP_HOST`
+- `CONSOLE_MCP_PORT`
 - `OPENSIM_CONSOLE_URL`
 - `OPENSIM_CONSOLE_USER`
 - `OPENSIM_CONSOLE_PASS`
 
 Notes:
 
-- `MCP_TRANSPORT=sse` is accepted for compatibility and currently runs HTTP streamable mode.
-- For this image, `MCP_TRANSPORT=stdio` is mainly useful for local process testing (not typical container network usage).
-
 Optional variables:
 
-- `MCP_HTTP_ENDPOINT` (default `/mcp`)
-- `MCP_HTTP_BEARER_TOKEN`
-- `MCP_HTTP_KEEPALIVE_SECONDS`
-- `MCP_HTTP_DISALLOW_DELETE` (`true`/`false`)
-- `MCP_DIAGNOSTICS` (`true`/`false`)
+- `CONSOLE_MCP_HTTP_ENDPOINT` (default `/mcp`)
+- `CONSOLE_MCP_HTTP_BEARER_TOKEN`
+- `CONSOLE_MCP_HTTP_KEEPALIVE_SECONDS`
+- `CONSOLE_MCP_HTTP_DISALLOW_DELETE` (`true`/`false`)
+- `CONSOLE_MCP_DIAGNOSTICS` (`true`/`false`)
 - `OPENSIM_MCP_DEBUG` (`true`/`false`)
 
 ### Build local image
@@ -61,9 +58,9 @@ docker build -t opensim-console2mcp:local .
 
 ```bash
 docker run --rm \
-  -e MCP_TRANSPORT=http \
-  -e MCP_HOST=0.0.0.0 \
-  -e MCP_PORT=8997 \
+  -e CONSOLE_MCP_TRANSPORT=http \
+  -e CONSOLE_MCP_HOST=0.0.0.0 \
+  -e CONSOLE_MCP_PORT=8997 \
   -e OPENSIM_CONSOLE_URL=http://host.docker.internal:9000 \
   -e OPENSIM_CONSOLE_USER=ConsoleUser \
   -e OPENSIM_CONSOLE_PASS=ConsolePass \

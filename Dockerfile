@@ -15,10 +15,10 @@ COPY --from=build /workspace/target/dependency /opt/opensim-console2mcp/lib
 COPY docker/entrypoint.sh /usr/local/bin/opensim-console2mcp-entrypoint.sh
 RUN chmod +x /usr/local/bin/opensim-console2mcp-entrypoint.sh
 
-ENV MCP_TRANSPORT=http \
-    MCP_HOST=0.0.0.0 \
-    MCP_PORT=8997 \
-    MCP_HTTP_ENDPOINT=/mcp \
+ENV CONSOLE_MCP_TRANSPORT=http \
+    CONSOLE_MCP_HOST=0.0.0.0 \
+    CONSOLE_MCP_PORT=8997 \
+    CONSOLE_MCP_HTTP_ENDPOINT=/mcp \
     OPENSIM_CONSOLE_URL=http://opensim:9000 \
     OPENSIM_CONSOLE_USER=ConsoleUser \
     OPENSIM_CONSOLE_PASS=ConsolePass

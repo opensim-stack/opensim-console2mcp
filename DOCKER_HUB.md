@@ -17,10 +17,10 @@ Run the container and point it at your OpenSim REST console:
 
 ```bash
 docker run --rm \
-  -e MCP_TRANSPORT=http \
-  -e MCP_HOST=0.0.0.0 \
-  -e MCP_PORT=8997 \
-  -e MCP_HTTP_ENDPOINT=/mcp \
+  -e CONSOLE_MCP_TRANSPORT=http \
+  -e CONSOLE_MCP_HOST=0.0.0.0 \
+  -e CONSOLE_MCP_PORT=8997 \
+  -e CONSOLE_MCP_HTTP_ENDPOINT=/mcp \
   -e OPENSIM_CONSOLE_URL=http://host.docker.internal:9000 \
   -e OPENSIM_CONSOLE_USER=ConsoleUser \
   -e OPENSIM_CONSOLE_PASS=ConsolePass \

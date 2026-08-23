@@ -374,7 +374,10 @@ public class OpensimRESTConsole implements AutoCloseable {
 			}
 			return response.body();
 		} catch (IOException e) {
-			throw new IllegalStateException("REST call failed: " + e.getMessage(), e);
+			var detail = e.getMessage() == null || e.getMessage().isBlank()
+					? e.getClass().getSimpleName()
+					: e.getClass().getSimpleName() + ": " + e.getMessage();
+			throw new IllegalStateException("REST call failed: " + detail, e);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new IllegalStateException("REST call interrupted.", e);

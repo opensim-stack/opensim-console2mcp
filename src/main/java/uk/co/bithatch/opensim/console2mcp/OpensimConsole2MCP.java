@@ -126,7 +126,9 @@ public class OpensimConsole2MCP implements Callable<Integer> {
 			return runConsoleMode(opensim);
 		} catch (Exception e) {
 			System.err.println("Failed: " + e.getMessage());
-			e.printStackTrace(System.err);
+			if (debug) {
+				e.printStackTrace(System.err);
+			}
 			return 1;
 		}
 	}
