@@ -25,8 +25,8 @@ esac
 
 set -- \
   --mode "$mode" \
-  --username "${OPENSIM_CONSOLE_USER:-}" \
-  --password "${OPENSIM_CONSOLE_PASS:-}"
+  --username "${OPENSIM_CONSOLE_USER:-ConsoleUser}" \
+  --password "${OPENSIM_CONSOLE_PASS:-ConsolePass}"
 
 if [ "${OPENSIM_MCP_DEBUG:-false}" = "true" ]; then
   set -- "$@" --debug
