@@ -2,7 +2,7 @@
 
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-bithatch%2Fopensim--console2mcp-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/repository/docker/bithatch/opensim-console2mcp/general)
 
-Bridges the OpenSimulator REST console and the MCP protocol. Intend  for use as part of the [https://github.com/bithatch/opensim-osgrid-docker](Opensim and OSGrid Docker Stack)
+Bridges the OpenSimulator REST console and the MCP protocol. 
 
 **For Issues And Discussions see main project [opensim-ai-docker](https://github.com/opensim-stack/opensim-ai-docker)**
 
