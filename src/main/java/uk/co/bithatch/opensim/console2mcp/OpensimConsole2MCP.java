@@ -1,9 +1,9 @@
 package uk.co.bithatch.opensim.console2mcp;
 
 import java.io.BufferedReader;
-import java.nio.file.Files;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.concurrent.Callable;
@@ -12,6 +12,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
+import uk.co.bithatch.opensim.jlib.OpensimRESTConsole;
 
 @Command(name = "opensim-console2mcp", mixinStandardHelpOptions = true, description = "Interactive bridge to the OpenSimulator REST console.")
 public class OpensimConsole2MCP implements Callable<Integer> {
